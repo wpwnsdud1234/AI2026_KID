@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>전국 어린이 보호구역 안심 지도 & 안전경로 추천</title>
+
+  <!-- Leaflet CSS & MarkerCluster CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+  
+  <!-- Google Fonts: Inter & Noto Sans KR -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+KR:wght@300;400;500;700;900&display=swap" rel="stylesheet">
+  
+  <!-- FontAwesome for Icon Support -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+  <script type="module" crossorigin src="/assets/index-_8suFFB4.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-uQB3qTib.css">
+</head>
+<body class="dark-theme">
+  <div id="app">
+    <!-- Top Header Navigation Bar -->
+    <header class="top-header">
+      <div class="logo-group">
+        <div class="logo-icon">
+          <i class="fa-solid fa-shield-cat"></i>
+        </div>
+        <div class="logo-text">
+          <h1>스쿨존 안심가디언</h1>
+          <span class="sub-title">전국 어린이보호구역 & 안전경로 탐색기</span>
+        </div>
+      </div>
+
+      <!-- Real-time Stats Badges -->
+      <div class="stats-bar">
+        <div class="stat-card total">
+          <span class="label"><i class="fa-solid fa-school"></i> 표시 중 구역</span>
+          <span class="value" id="stat-total-count">0</span>
+        </div>
+        <div class="stat-card cctv-y">
+          <span class="label"><i class="fa-solid fa-video"></i> CCTV 설치 (파란색)</span>
+          <span class="value" id="stat-cctv-y-count">0</span>
+        </div>
+        <div class="stat-card cctv-n">
+          <span class="label"><i class="fa-solid fa-video-slash"></i> CCTV 미설치 (빨간색)</span>
+          <span class="value" id="stat-cctv-n-count">0</span>
+        </div>
+        <div class="stat-card safe-ratio">
+          <span class="label"><i class="fa-solid fa-chart-pie"></i> 안전 비율</span>
+          <span class="value" id="stat-safe-ratio">0%</span>
+        </div>
+      </div>
+
+      <div class="header-actions">
+        <button id="toggle-theme-btn" class="icon-btn" title="다크/라이트 모드 전환">
+          <i class="fa-solid fa-moon"></i>
+        </button>
+      </div>
+    </header>
+
+    <div class="main-container">
+      <!-- Sidebar Panel -->
+      <aside class="sidebar" id="sidebar">
+        <div class="sidebar-tabs">
+          <button class="tab-btn active" data-tab="filter-tab">
+            <i class="fa-solid fa-filter"></i> 필터 및 검색
+          </button>
+          <button class="tab-btn" data-tab="route-tab">
+            <i class="fa-solid fa-route"></i> 안전경로 추천
+          </button>
+        </div>
+
+        <div class="tab-content active" id="filter-tab">
+          <!-- Keyword Search -->
+          <div class="filter-section">
+            <label class="section-title"><i class="fa-solid fa-magnifying-glass"></i> 시설명 / 주소 검색</label>
+            <div class="search-input-wrapper">
+              <input type="text" id="search-input" placeholder="학교명, 유치원, 도로명 주소..." />
+              <button id="clear-search-btn" class="clear-btn"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+          </div>
+
+          <!-- CCTV Status Filter -->
+          <div class="filter-section">
+            <label class="section-title"><i class="fa-solid fa-camera-rotate"></i> CCTV 설치여부 필터</label>
+            <div class="cctv-filter-options">
+              <label class="radio-chip active">
+                <input type="radio" name="cctv-filter" value="ALL" checked>
+                <span>전체 (14,647)</span>
+              </label>
+              <label class="radio-chip blue-chip">
+                <input type="radio" name="cctv-filter" value="Y">
+                <span><i class="fa-solid fa-circle" style="color: #3b82f6;"></i> 설치됨 (파란색)</span>
+              </label>
+              <label class="radio-chip red-chip">
+                <input type="radio" name="cctv-filter" value="N">
+                <span><i class="fa-solid fa-circle" style="color: #ef4444;"></i> 미설치 (빨간색)</span>
+              </label>
+            </div>
+          </div>
+
+          <!-- Facility Type Filter -->
+          <div class="filter-section">
+            <div class="filter-header">
+              <label class="section-title"><i class="fa-solid fa-building-user"></i> 시설종류 선택</label>
+              <div class="quick-toggle">
+                <button type="button" id="select-all-types">전체선택</button>
+                <span>|</span>
+                <button type="button" id="deselect-all-types">선택해제</button>
+              </div>
+            </div>
+            <div class="checkbox-grid" id="facility-checkbox-container">
+              <!-- Dynamically populated -->
+            </div>
+          </div>
+
+          <!-- Reset Filter Button -->
+          <button id="reset-filters-btn" class="btn btn-secondary full-width">
+            <i class="fa-solid fa-arrows-rotate"></i> 필터 초기화
+          </button>
+        </div>
+
+        <!-- Safe Route Tab -->
+        <div class="tab-content" id="route-tab">
+          <div class="route-input-card">
+            <div class="route-field">
+              <div class="point-badge origin-badge">출발</div>
+              <div class="input-with-action">
+                <input type="text" id="origin-input" placeholder="출발지 검색 또는 지도 마커 클릭" autocomplete="off" />
+                <button id="set-origin-map-btn" class="icon-action-btn" title="지도에서 선택">
+                  <i class="fa-solid fa-location-dot"></i>
+                </button>
+              </div>
+              <div id="origin-results" class="search-autocomplete-list"></div>
+            </div>
+
+            <div class="route-swap-row">
+              <button id="swap-route-btn" class="swap-btn" title="출발지/목적지 맞바꾸기">
+                <i class="fa-solid fa-arrow-down-up-lock"></i>
+              </button>
+            </div>
+
+            <div class="route-field">
+              <div class="point-badge dest-badge">목적</div>
+              <div class="input-with-action">
+                <input type="text" id="destination-input" placeholder="목적지 검색 또는 지도 마커 클릭" autocomplete="off" />
+                <button id="set-dest-map-btn" class="icon-action-btn" title="지도에서 선택">
+                  <i class="fa-solid fa-flag-checkered"></i>
+                </button>
+              </div>
+              <div id="dest-results" class="search-autocomplete-list"></div>
+            </div>
+
+            <button id="calc-route-btn" class="btn btn-primary full-width">
+              <i class="fa-solid fa-shield-halved"></i> 안심 경로 탐색
+            </button>
+          </div>
+
+          <!-- Route Comparison & Analysis Summary -->
+          <div id="route-result-container" class="route-result-container hidden">
+            <h3 class="result-header"><i class="fa-solid fa-square-poll-vertical"></i> 경로 비교 분석</h3>
+
+            <!-- Safe Route Summary Card -->
+            <div class="route-card safe-card active" id="card-safe-route">
+              <div class="card-header">
+                <span class="route-type-badge safe"><i class="fa-solid fa-shield"></i> 추천: 어린이 안심 경로</span>
+                <span class="safety-score" id="safe-score-val">안전 96점</span>
+              </div>
+              <div class="route-metrics">
+                <div class="metric-item">
+                  <span class="m-label">CCTV 경유</span>
+                  <span class="m-val highlight-blue" id="safe-cctv-cnt">- 대</span>
+                </div>
+                <div class="metric-item">
+                  <span class="m-label">스쿨존 구간</span>
+                  <span class="m-val highlight-green" id="safe-school-ratio">-%</span>
+                </div>
+                <div class="metric-item">
+                  <span class="m-label">이동 거리</span>
+                  <span class="m-val" id="safe-distance">- km</span>
+                </div>
+                <div class="metric-item">
+                  <span class="m-label">소요 시간</span>
+                  <span class="m-val" id="safe-time">- 분</span>
+                </div>
+              </div>
+              <p class="safe-desc" id="safe-route-desc">CCTV가 밀집된 스쿨존 보안 구역을 우선 경유하여 안전성을 최대화한 경로입니다.</p>
+            </div>
+
+            <!-- Standard Route Summary Card -->
+            <div class="route-card standard-card" id="card-standard-route">
+              <div class="card-header">
+                <span class="route-type-badge standard"><i class="fa-solid fa-bolt"></i> 비교: 일반 최단 경로</span>
+                <span class="safety-score low" id="standard-score-val">안전 58점</span>
+              </div>
+              <div class="route-metrics">
+                <div class="metric-item">
+                  <span class="m-label">CCTV 경유</span>
+                  <span class="m-val" id="standard-cctv-cnt">- 대</span>
+                </div>
+                <div class="metric-item">
+                  <span class="m-label">스쿨존 구간</span>
+                  <span class="m-val" id="standard-school-ratio">-%</span>
+                </div>
+                <div class="metric-item">
+                  <span class="m-label">이동 거리</span>
+                  <span class="m-val" id="standard-distance">- km</span>
+                </div>
+                <div class="metric-item">
+                  <span class="m-label">소요 시간</span>
+                  <span class="m-val" id="standard-time">- 분</span>
+                </div>
+              </div>
+            </div>
+
+            <button id="clear-route-btn" class="btn btn-outline full-width margin-top">
+              <i class="fa-solid fa-trash-can"></i> 경로 초기화
+            </button>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Map Container -->
+      <main class="map-wrapper">
+        <div id="map"></div>
+
+        <!-- Floating Map Controls & Map Legend -->
+        <div class="map-legend-floating">
+          <div class="legend-title">마커 범례</div>
+          <div class="legend-item">
+            <span class="legend-pin blue-pin"></span>
+            <span>CCTV 설치 구역 (Y)</span>
+          </div>
+          <div class="legend-item">
+            <span class="legend-pin red-pin"></span>
+            <span>CCTV 미설치 구역 (N)</span>
+          </div>
+          <div class="legend-item">
+            <span class="legend-line safe-line"></span>
+            <span>어린이 안심 경로</span>
+          </div>
+          <div class="legend-item">
+            <span class="legend-line standard-line"></span>
+            <span>일반 최단 경로</span>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <!-- Leaflet JS & MarkerCluster JS -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+
+</body>
+</html>
