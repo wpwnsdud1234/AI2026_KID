@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>전국 어린이 보호구역 안전지도</title>
+
+<!-- 폰트 -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Do+Hyeon&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css" />
+
+<!-- Leaflet (지도) -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+<!-- Leaflet.markercluster (마커 클러스터링) -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.css" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.Default.css" />
+
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<div id="app">
+
+  <!-- ===== 사이드바 ===== -->
+  <aside id="sidebar">
+
+    <header id="brand">
+      <div class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 48 48" width="34" height="34">
+          <polygon points="24,3 45,24 24,45 3,24" fill="var(--zone-yellow)" stroke="var(--ink)" stroke-width="2.5"/>
+          <text x="24" y="30" font-family="'Do Hyeon', sans-serif" font-size="20" text-anchor="middle" fill="var(--ink)">어</text>
+        </svg>
+      </div>
+      <div class="brand-text">
+        <h1>어린이 보호구역<br/>안전지도</h1>
+        <p class="brand-sub">전국 표준데이터 · 14,647개소</p>
+      </div>
+    </header>
+    <div class="stripe-accent" aria-hidden="true"></div>
+
+    <div id="sidebar-scroll">
+
+      <!-- 통계 -->
+      <section class="panel" id="stats-panel">
+        <div class="stat-row">
+          <div class="stat-box">
+            <span class="stat-num" id="stat-total">0</span>
+            <span class="stat-label">필터 결과</span>
+          </div>
+          <div class="stat-box safe">
+            <span class="stat-num" id="stat-cctv-y">0</span>
+            <span class="stat-label">CCTV 설치</span>
+          </div>
+          <div class="stat-box alert">
+            <span class="stat-num" id="stat-cctv-n">0</span>
+            <span class="stat-label">CCTV 미설치</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- 필터: CCTV -->
+      <section class="panel">
+        <h2 class="panel-title">CCTV 설치여부</h2>
+        <div class="segmented" id="cctv-filter" role="radiogroup" aria-label="CCTV 설치여부 필터">
+          <button type="button" class="seg-btn active" data-cctv="all">전체</button>
+          <button type="button" class="seg-btn" data-cctv="Y">설치(Y)</button>
+          <button type="button" class="seg-btn" data-cctv="N">미설치(N)</button>
+        </div>
+      </section>
+
+      <!-- 필터: 시설종류 -->
+      <section class="panel">
+        <div class="panel-head-row">
+          <h2 class="panel-title">시설종류</h2>
+          <button type="button" id="type-toggle-all" class="link-btn">전체해제</button>
+        </div>
+        <div id="type-filter" class="type-list"><!-- JS로 채워짐 --></div>
+      </section>
+
+      <!-- 범례 -->
+      <section class="panel" id="legend-panel">
+        <h2 class="panel-title">범례</h2>
+        <ul class="legend-list">
+          <li><span class="dot dot-blue"></span> CCTV 설치 구역</li>
+          <li><span class="dot dot-red"></span> CCTV 미설치 구역</li>
+          <li><span class="dot dot-start"></span> 출발지</li>
+          <li><span class="dot dot-end"></span> 도착지</li>
+        </ul>
+      </section>
+
+      <!-- 안전 경로 안내 -->
+      <section class="panel" id="route-panel">
+        <h2 class="panel-title">안전 경로 찾기</h2>
+        <p class="panel-desc">출발지·도착지를 검색하거나 지도를 클릭해 지정하면, 어린이보호구역을 최대한 경유하는 경로를 안내합니다.</p>
+
+        <div class="route-field">
+          <label for="route-start-input">출발지</label>
+          <div class="route-input-row">
+            <input type="text" id="route-start-input" placeholder="주소 검색 또는 지도 클릭" autocomplete="off" />
+            <button type="button" class="pick-btn" id="pick-start-btn" title="지도에서 출발지 클릭">📍</button>
+          </div>
+        </div>
+
+        <div class="route-field">
+          <label for="route-end-input">도착지</label>
+          <div class="route-input-row">
+            <input type="text" id="route-end-input" placeholder="주소 검색 또는 지도 클릭" autocomplete="off" />
+            <button type="button" class="pick-btn" id="pick-end-btn" title="지도에서 도착지 클릭">🏁</button>
+          </div>
+        </div>
+
+        <button type="button" id="find-route-btn" class="primary-btn stripe-accent-btn">
+          <span>안전 경로 찾기</span>
+        </button>
+        <button type="button" id="clear-route-btn" class="ghost-btn">경로 초기화</button>
+
+        <div id="route-status" class="route-status" aria-live="polite"></div>
+
+        <div id="route-result" class="route-result" hidden>
+          <div class="route-compare">
+            <div class="route-card shortest">
+              <span class="route-card-label">최단 경로</span>
+              <span class="route-card-value" id="route-shortest-dist">-</span>
+              <span class="route-card-sub" id="route-shortest-time">-</span>
+            </div>
+            <div class="route-card safe">
+              <span class="route-card-label">보호구역 경유 경로</span>
+              <span class="route-card-value" id="route-safe-dist">-</span>
+              <span class="route-card-sub" id="route-safe-time">-</span>
+            </div>
+          </div>
+          <p class="route-note" id="route-zone-count"></p>
+        </div>
+      </section>
+
+    </div>
+  </aside>
+
+  <!-- ===== 지도 영역 ===== -->
+  <main id="map-wrap">
+    <div id="map"></div>
+    <div id="map-loading" class="map-loading">
+      <div class="spinner"></div>
+      <span>보호구역 데이터를 불러오는 중…</span>
+    </div>
+  </main>
+
+</div>
+
+<!-- Leaflet -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/leaflet.markercluster.min.js"></script>
+
+<!-- 앱 스크립트 (순서 중요) -->
+<script src="js/popup.js"></script>
+<script src="js/map.js"></script>
+<script src="js/filter.js"></script>
+<script src="js/route.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
