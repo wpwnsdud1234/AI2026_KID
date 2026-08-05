@@ -13,6 +13,63 @@ let safeRoutePolyline = null;
 let standardRoutePolyline = null;
 let safeWaypointMarkers = [];
 
+// Map pick mode: 'origin' | 'dest' | null
+let mapPickMode = null;
+
+// Debounce timer for autocomplete
+const debounceTimers = {};
+
+// ---------- Toast Helper ----------
+function showToast(msg, color = '#3b82f6', duration = 3000) {
+  let toast = document.getElementById('pick-toast');
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.id = 'pick-toast';
+    toast.style.cssText = `
+      position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%);
+      padding: 10px 22px; border-radius: 24px; font-size: 0.9rem; font-weight: 600;
+      color: white; z-index: 9999; pointer-events: none;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.5); transition: opacity 0.3s;
+    `;
+    document.body.appendChild(toast);
+  }
+  toast.style.background = color;
+  toast.style.opacity = '1';
+  toast.textContent = msg;
+  clearTimeout(toast._timer);
+  toast._timer = setTimeout(() => { toast.style.opacity = '0'; }, duration);
+}
+
+// ---------- Reverse Geocode (Nominatim) ----------
+async function reverseGeocode(lat, lng) {
+  try {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&accept-language=ko`,
+      { headers: { 'Accept-Language': 'ko' } }
+    );
+    if (!res.ok) return `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+    const data = await res.json();
+    return data.display_name || `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+  } catch {
+    return `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+  }
+}
+
+// ---------- Nominatim Forward Geocode ----------
+async function forwardGeocode(query) {
+  try {
+    const encoded = encodeURIComponent(query);
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/search?q=${encoded}&format=json&limit=5&accept-language=ko&countrycodes=kr`,
+      { headers: { 'Accept-Language': 'ko' } }
+    );
+    if (!res.ok) return [];
+    return await res.json();
+  } catch {
+    return [];
+  }
+}
+
 // Custom SVG Icons
 const blueMarkerSvg = `
 <svg class="marker-pin-svg" viewBox="0 0 384 512" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -307,6 +364,14 @@ function setupUIEventListeners() {
   setupAutocomplete('origin-input', 'origin-results', (point) => setOriginPoint(point));
   setupAutocomplete('destination-input', 'dest-results', (point) => setDestPoint(point));
 
+  // Map Pick Buttons
+  document.getElementById('set-origin-map-btn').addEventListener('click', () => {
+    enterMapPickMode('origin');
+  });
+  document.getElementById('set-dest-map-btn').addEventListener('click', () => {
+    enterMapPickMode('dest');
+  });
+
   // Swap Route Points
   document.getElementById('swap-route-btn').addEventListener('click', () => {
     const temp = originPoint;
@@ -319,53 +384,152 @@ function setupUIEventListeners() {
 
   // Clear Route Button
   document.getElementById('clear-route-btn').addEventListener('click', clearRoute);
+
+  // ESC key to cancel map pick mode
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && mapPickMode) exitMapPickMode();
+  });
 }
 
 function setupAutocomplete(inputId, listId, onSelect) {
   const input = document.getElementById(inputId);
   const list = document.getElementById(listId);
 
-  input.addEventListener('input', () => {
-    const val = input.value.trim().toLowerCase();
-    if (!val) {
-      list.classList.remove('active');
-      return;
-    }
-
-    const matches = allSchools.filter(s =>
-      s.name.toLowerCase().includes(val) || s.road_addr.toLowerCase().includes(val)
-    ).slice(0, 6);
-
+  function renderList(items) {
     list.innerHTML = '';
-    if (matches.length === 0) {
+    if (items.length === 0) {
       list.classList.remove('active');
       return;
     }
-
-    matches.forEach(m => {
-      const item = document.createElement('div');
-      item.className = 'autocomplete-item';
-      item.innerHTML = `
-        <span class="item-title">${m.name}</span>
-        <span class="item-sub">${m.road_addr || m.jibun_addr}</span>
-      `;
-      item.addEventListener('click', () => {
-        input.value = m.name;
-        list.classList.remove('active');
-        onSelect({ lat: m.lat, lng: m.lng, name: m.name });
-      });
-      list.appendChild(item);
-    });
-
+    items.forEach(item => list.appendChild(item));
     list.classList.add('active');
+  }
+
+  function makeSchoolItem(m) {
+    const el = document.createElement('div');
+    el.className = 'autocomplete-item';
+    el.innerHTML = `
+      <span class="item-badge school-badge">스쿨존</span>
+      <span class="item-title">${m.name}</span>
+      <span class="item-sub">${m.road_addr || m.jibun_addr}</span>
+    `;
+    el.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      input.value = m.name;
+      list.classList.remove('active');
+      onSelect({ lat: m.lat, lng: m.lng, name: m.name });
+    });
+    return el;
+  }
+
+  function makeGeoItem(g) {
+    const el = document.createElement('div');
+    el.className = 'autocomplete-item';
+    const shortName = g.display_name.split(',').slice(0, 3).join(', ');
+    el.innerHTML = `
+      <span class="item-badge addr-badge">주소</span>
+      <span class="item-title">${shortName}</span>
+      <span class="item-sub">${g.display_name}</span>
+    `;
+    el.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      input.value = shortName;
+      list.classList.remove('active');
+      onSelect({ lat: parseFloat(g.lat), lng: parseFloat(g.lon), name: shortName });
+    });
+    return el;
+  }
+
+  input.addEventListener('input', () => {
+    const val = input.value.trim();
+    if (!val) { list.classList.remove('active'); return; }
+
+    clearTimeout(debounceTimers[inputId]);
+
+    const valLower = val.toLowerCase();
+
+    // 1. Show local school matches immediately (up to 3)
+    const localMatches = allSchools.filter(s =>
+      s.name.toLowerCase().includes(valLower) ||
+      s.road_addr.toLowerCase().includes(valLower) ||
+      s.jibun_addr.toLowerCase().includes(valLower)
+    ).slice(0, 3);
+
+    const localItems = localMatches.map(makeSchoolItem);
+    renderList(localItems);
+
+    // 2. Debounce: query Nominatim for general address/place search (500ms)
+    debounceTimers[inputId] = setTimeout(async () => {
+      if (input.value.trim().toLowerCase() !== valLower) return; // input changed
+
+      const geoResults = await forwardGeocode(val);
+      const geoItems = geoResults.slice(0, 5).map(makeGeoItem);
+
+      // Merge: show school results first, then address results (max 6 total)
+      // If no school matches, show up to 5 address results so general places are fully visible
+      let mergedItems;
+      if (localItems.length === 0) {
+        mergedItems = geoItems.slice(0, 5);
+      } else {
+        mergedItems = [...localItems.slice(0, 3), ...geoItems.slice(0, 3)];
+      }
+
+      if (input.value.trim().toLowerCase() === valLower) {
+        renderList(mergedItems);
+      }
+    }, 500);
   });
 
-  // Close list on blur
+  // Close list on outside click
   document.addEventListener('click', (e) => {
     if (!input.contains(e.target) && !list.contains(e.target)) {
       list.classList.remove('active');
     }
   });
+}
+
+// ---------- Map Pick Mode ----------
+function enterMapPickMode(type) {
+  mapPickMode = type;
+  const label = type === 'origin' ? '출발지' : '목적지';
+  const color = type === 'origin' ? '#3b82f6' : '#10b981';
+  document.getElementById('map').style.cursor = 'crosshair';
+  showToast(`🗺️ 지도에서 ${label}로 지정할 위치를 클릭하세요  (ESC 취소)`, color, 999999);
+
+  // Highlight the active pick button
+  const btnId = type === 'origin' ? 'set-origin-map-btn' : 'set-dest-map-btn';
+  document.querySelectorAll('.icon-action-btn').forEach(b => b.classList.remove('picking'));
+  document.getElementById(btnId).classList.add('picking');
+
+  // One-time map click handler
+  map.once('click', async (e) => {
+    const { lat, lng } = e.latlng;
+    const name = await reverseGeocode(lat, lng);
+    const shortName = name.split(',').slice(0, 3).join(', ');
+    if (type === 'origin') {
+      document.getElementById('origin-input').value = shortName;
+      setOriginPoint({ lat, lng, name: shortName });
+    } else {
+      document.getElementById('destination-input').value = shortName;
+      setDestPoint({ lat, lng, name: shortName });
+    }
+    showToast(`✅ ${type === 'origin' ? '출발지' : '목적지'}가 설정되었습니다`, color, 2500);
+    exitMapPickMode();
+    // Auto switch to route tab
+    switchToRouteTab();
+  });
+}
+
+function exitMapPickMode() {
+  mapPickMode = null;
+  document.getElementById('map').style.cursor = '';
+  document.querySelectorAll('.icon-action-btn').forEach(b => b.classList.remove('picking'));
+  // Hide toast immediately
+  const toast = document.getElementById('pick-toast');
+  if (toast) toast.style.opacity = '0';
+  // Remove any pending one-time click listener
+  map.off('click');
+  // Re-add popup click support (Leaflet handles marker clicks separately, no re-add needed)
 }
 
 function switchToRouteTab() {
@@ -377,6 +541,54 @@ function switchToRouteTab() {
   document.getElementById('route-tab').classList.add('active');
 }
 
+function makeOriginIcon(name) {
+  const shortName = name ? name.slice(0, 18) + (name.length > 18 ? '...' : '') : '출발지';
+  return L.divIcon({
+    html: `
+      <div class="route-pin origin-pin">
+        <div class="pin-body">
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="12" cy="12" r="5" fill="white"/>
+            <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" fill="#2563eb"/>
+            <text x="12" y="13.5" text-anchor="middle" fill="white" font-size="9" font-weight="bold" font-family="sans-serif">A</text>
+          </svg>
+        </div>
+        <div class="pin-label origin-label">
+          <span class="pin-dot"></span><span>${shortName}</span>
+        </div>
+      </div>
+    `,
+    className: '',
+    iconSize: [40, 54],
+    iconAnchor: [20, 52],
+    popupAnchor: [0, -54]
+  });
+}
+
+function makeDestIcon(name) {
+  const shortName = name ? name.slice(0, 18) + (name.length > 18 ? '...' : '') : '목적지';
+  return L.divIcon({
+    html: `
+      <div class="route-pin dest-pin">
+        <div class="pin-body">
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="12" cy="12" r="5" fill="white"/>
+            <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" fill="#059669"/>
+            <text x="12" y="13.5" text-anchor="middle" fill="white" font-size="9" font-weight="bold" font-family="sans-serif">B</text>
+          </svg>
+        </div>
+        <div class="pin-label dest-label">
+          <span class="pin-dot"></span><span>${shortName}</span>
+        </div>
+      </div>
+    `,
+    className: '',
+    iconSize: [40, 54],
+    iconAnchor: [20, 52],
+    popupAnchor: [0, -54]
+  });
+}
+
 function setOriginPoint(point) {
   originPoint = point;
   document.getElementById('origin-input').value = point ? point.name : '';
@@ -385,11 +597,8 @@ function setOriginPoint(point) {
 
   if (point) {
     originMarker = L.marker([point.lat, point.lng], {
-      icon: L.divIcon({
-        html: '<div style="background:#3b82f6;color:white;padding:6px 12px;border-radius:20px;font-weight:bold;font-size:12px;box-shadow:0 0 10px #3b82f6;">📍 출발</div>',
-        className: '',
-        iconAnchor: [30, 15]
-      })
+      icon: makeOriginIcon(point.name),
+      zIndexOffset: 1000
     }).addTo(map);
   }
 }
@@ -402,11 +611,8 @@ function setDestPoint(point) {
 
   if (point) {
     destMarker = L.marker([point.lat, point.lng], {
-      icon: L.divIcon({
-        html: '<div style="background:#10b981;color:white;padding:6px 12px;border-radius:20px;font-weight:bold;font-size:12px;box-shadow:0 0 10px #10b981;">🏁 목적지</div>',
-        className: '',
-        iconAnchor: [35, 15]
-      })
+      icon: makeDestIcon(point.name),
+      zIndexOffset: 1000
     }).addTo(map);
   }
 }
@@ -422,7 +628,7 @@ async function handleCalculateRoute() {
 
   // Show loading in button
   const calcBtn = document.getElementById('calc-route-btn');
-  calcBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> 경로 분석 중...';
+  calcBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> 도보 경로 분석 중...';
   calcBtn.disabled = true;
 
   try {
@@ -432,7 +638,7 @@ async function handleCalculateRoute() {
     console.error('Route calculation error:', err);
     alert('경로 계산 중 오류가 발생했습니다.');
   } finally {
-    calcBtn.innerHTML = '<i class="fa-solid fa-shield-halved"></i> 안심 경로 탐색';
+    calcBtn.innerHTML = '<i class="fa-solid fa-person-walking"></i> 도보 안심 경로 탐색';
     calcBtn.disabled = false;
   }
 }

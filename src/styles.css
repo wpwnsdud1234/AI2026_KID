@@ -558,6 +558,56 @@ body {
 .autocomplete-item .item-sub {
   font-size: 0.7rem;
   color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 280px;
+}
+
+/* Autocomplete type badges */
+.item-badge {
+  display: inline-block;
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 8px;
+  margin-bottom: 2px;
+  width: fit-content;
+}
+
+.item-badge.school-badge {
+  background: rgba(59, 130, 246, 0.2);
+  color: #3b82f6;
+  border: 1px solid rgba(59, 130, 246, 0.4);
+}
+
+.item-badge.addr-badge {
+  background: rgba(16, 185, 129, 0.2);
+  color: #10b981;
+  border: 1px solid rgba(16, 185, 129, 0.4);
+}
+
+/* Map pick mode active button state */
+.icon-action-btn.picking {
+  background: var(--primary);
+  color: white;
+  border-color: var(--primary);
+  animation: pickPulse 1s ease-in-out infinite;
+}
+
+@keyframes pickPulse {
+  0%, 100% { box-shadow: 0 0 0 0 var(--primary-glow); }
+  50% { box-shadow: 0 0 0 6px transparent; }
+}
+
+/* Ensure autocomplete dropdown is fully above map */
+.route-field {
+  position: relative;
+  z-index: 10;
+}
+
+.search-autocomplete-list {
+  z-index: 9999 !important;
 }
 
 /* Route Result Cards */
@@ -883,3 +933,106 @@ body {
 
 .legend-line.safe-line { background: #10b981; box-shadow: 0 0 8px #10b981; }
 .legend-line.standard-line { background: #94a3b8; }
+
+/* ============================
+   Route Pin Marker Styles
+   ============================ */
+.route-pin {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+}
+
+.route-pin .pin-body {
+  width: 40px;
+  height: 40px;
+  position: relative;
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.45));
+  transition: transform 0.2s ease;
+}
+
+.route-pin .pin-body:hover {
+  transform: scale(1.15);
+}
+
+.route-pin .pin-body svg {
+  width: 40px;
+  height: 40px;
+}
+
+/* Pulsing ring animation */
+.route-pin::before {
+  content: '';
+  position: absolute;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  opacity: 0;
+  animation: ripplePing 1.8s ease-out infinite;
+  pointer-events: none;
+}
+
+.origin-pin::before {
+  background: rgba(37, 99, 235, 0.5);
+  animation-delay: 0s;
+}
+
+.dest-pin::before {
+  background: rgba(5, 150, 105, 0.5);
+  animation-delay: 0.4s;
+}
+
+@keyframes ripplePing {
+  0% { width: 14px; height: 14px; opacity: 0.7; bottom: 22px; }
+  100% { width: 40px; height: 40px; opacity: 0; bottom: 10px; }
+}
+
+/* Label bubble below pin */
+.route-pin .pin-label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+  padding: 4px 10px;
+  border-radius: 14px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  font-family: 'Noto Sans KR', sans-serif;
+  margin-top: 2px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.35);
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.route-pin .pin-label span:not(.pin-dot) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 130px;
+}
+
+.pin-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: white;
+}
+
+.origin-label {
+  background: #1d4ed8;
+  color: white;
+  border: 1.5px solid rgba(255,255,255,0.3);
+}
+
+.dest-label {
+  background: #065f46;
+  color: white;
+  border: 1.5px solid rgba(255,255,255,0.3);
+}
+

@@ -74,8 +74,8 @@ export function evaluateRouteSafety(coordinates, allSchools) {
 export async function calculateSafeRoute(origin, destination, allSchools) {
   // origin: { lat, lng }, destination: { lat, lng }
 
-  // 1. OSRM Direct Request
-  const osrmUrl = `https://router.project-osrm.org/route/v1/driving/${origin.lng},${origin.lat};${destination.lng},${destination.lat}?overview=full&geometries=geojson&steps=true&alternatives=true`;
+  // 1. OSRM Walking Route Request (foot profile)
+  const osrmUrl = `https://router.project-osrm.org/route/v1/foot/${origin.lng},${origin.lat};${destination.lng},${destination.lat}?overview=full&geometries=geojson&steps=true&alternatives=true`;
 
   let osrmData = null;
   try {
@@ -89,13 +89,15 @@ export async function calculateSafeRoute(origin, destination, allSchools) {
 
   let standardCoords = [];
   let standardDistKm = getDistanceKm(origin.lat, origin.lng, destination.lat, destination.lng);
-  let standardDurationMin = Math.round(standardDistKm * 2.5);
+  // Walking speed: 5km/h => durationMin = distKm / 5 * 60
+  let standardDurationMin = Math.max(1, Math.round((standardDistKm / 5) * 60));
 
   if (osrmData && osrmData.routes && osrmData.routes.length > 0) {
     const primaryRoute = osrmData.routes[0];
     standardCoords = primaryRoute.geometry.coordinates; // [[lng, lat], ...]
     standardDistKm = Math.round((primaryRoute.distance / 1000) * 10) / 10;
-    standardDurationMin = Math.max(1, Math.round(primaryRoute.duration / 60));
+    // Duration based on walking speed: distKm / 5km/h * 60min
+    standardDurationMin = Math.max(1, Math.round((standardDistKm / 5) * 60));
   } else {
     // Direct Line fallback
     standardCoords = [[origin.lng, origin.lat], [destination.lng, destination.lat]];
@@ -112,9 +114,9 @@ export async function calculateSafeRoute(origin, destination, allSchools) {
   let safeDurationMin = standardDurationMin;
 
   if (safeWaypoints.length > 0 && osrmData) {
-    // Try building waypoint route via OSRM
+    // Try building waypoint route via OSRM foot profile
     const wpStr = safeWaypoints.map(w => `${w.lng},${w.lat}`).join(';');
-    const wpOsrmUrl = `https://router.project-osrm.org/route/v1/driving/${origin.lng},${origin.lat};${wpStr};${destination.lng},${destination.lat}?overview=full&geometries=geojson`;
+    const wpOsrmUrl = `https://router.project-osrm.org/route/v1/foot/${origin.lng},${origin.lat};${wpStr};${destination.lng},${destination.lat}?overview=full&geometries=geojson`;
     try {
       const wpRes = await fetch(wpOsrmUrl);
       if (wpRes.ok) {
@@ -123,7 +125,8 @@ export async function calculateSafeRoute(origin, destination, allSchools) {
           const r = wpData.routes[0];
           safeCoords = r.geometry.coordinates;
           safeDistKm = Math.round((r.distance / 1000) * 10) / 10;
-          safeDurationMin = Math.max(1, Math.round(r.duration / 60));
+          // Duration based on walking speed: distKm / 5km/h * 60min
+          safeDurationMin = Math.max(1, Math.round((safeDistKm / 5) * 60));
         }
       }
     } catch (e) {
@@ -146,12 +149,13 @@ export async function calculateSafeRoute(origin, destination, allSchools) {
       });
       safeCoords = bestRoute.geometry.coordinates;
       safeDistKm = Math.round((bestRoute.distance / 1000) * 10) / 10;
-      safeDurationMin = Math.max(1, Math.round(bestRoute.duration / 60));
+      // Duration based on walking speed: distKm / 5km/h * 60min
+      safeDurationMin = Math.max(1, Math.round((safeDistKm / 5) * 60));
     } else {
       // Build bezier curve detour through safe points
       safeCoords = buildSafeDetourCoords(origin, destination, safeWaypoints);
       safeDistKm = Math.round((standardDistKm * 1.15) * 10) / 10;
-      safeDurationMin = Math.round(standardDurationMin * 1.2);
+      safeDurationMin = Math.max(1, Math.round((safeDistKm / 5) * 60));
     }
   }
 

@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="ko">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -9,17 +10,20 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
-  
+
   <!-- Google Fonts: Inter & Noto Sans KR -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+KR:wght@300;400;500;700;900&display=swap" rel="stylesheet">
-  
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+KR:wght@300;400;500;700;900&display=swap"
+    rel="stylesheet">
+
   <!-- FontAwesome for Icon Support -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
   <link rel="stylesheet" href="/src/styles.css" />
 </head>
+
 <body class="dark-theme">
   <div id="app">
     <!-- Top Header Navigation Bar -->
@@ -155,7 +159,7 @@
             </div>
 
             <button id="calc-route-btn" class="btn btn-primary full-width">
-              <i class="fa-solid fa-shield-halved"></i> 안심 경로 탐색
+              <i class="fa-solid fa-person-walking"></i> 도보 안심 경로 탐색
             </button>
           </div>
 
@@ -183,11 +187,12 @@
                   <span class="m-val" id="safe-distance">- km</span>
                 </div>
                 <div class="metric-item">
-                  <span class="m-label">소요 시간</span>
+                  <span class="m-label">도보 시간</span>
                   <span class="m-val" id="safe-time">- 분</span>
                 </div>
               </div>
-              <p class="safe-desc" id="safe-route-desc">CCTV가 밀집된 스쿨존 보안 구역을 우선 경유하여 안전성을 최대화한 경로입니다.</p>
+              <p class="safe-desc" id="safe-route-desc">CCTV가 밀집된 스쿨존 구간을 우선 경유하는 <strong>도보 안심 경로</strong>입니다. 어린이의 안전한
+                등하교를 위한 최적 보행 경로입니다.</p>
             </div>
 
             <!-- Standard Route Summary Card -->
@@ -210,7 +215,7 @@
                   <span class="m-val" id="standard-distance">- km</span>
                 </div>
                 <div class="metric-item">
-                  <span class="m-label">소요 시간</span>
+                  <span class="m-label">도보 시간</span>
                   <span class="m-val" id="standard-time">- 분</span>
                 </div>
               </div>
@@ -257,4 +262,5 @@
 
   <script type="module" src="/src/app.js"></script>
 </body>
+
 </html>
