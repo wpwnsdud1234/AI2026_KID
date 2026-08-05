@@ -1,20 +1,24 @@
 /* route.js
  * - 지도 클릭 또는 주소 검색으로 출발지/도착지 지정
- * - OSRM 공개 라우팅 서버로 "최단 경로" 계산
+ * - OSRM 공개 라우팅 서버로 "최단 경로"를 도보(보행자) 기준으로 계산
  * - 어린이보호구역을 경유지(waypoint)로 삼아 "보호구역 우선 경유 경로" 계산
  *
  * 참고: 클라이언트 단독 구현이라 외부 무료 API(OSRM 데모서버, Nominatim)를
  * 사용한다. 두 서비스 모두 대량/상업적 트래픽에는 적합하지 않으므로,
  * 실제 서비스 전환 시 자체 라우팅/지오코딩 서버로 교체가 필요하다. (PRD 8장 참고)
+ *
+ * 도보(foot) 프로파일: router.project-osrm.org 공개 데모는 driving만 지원하므로,
+ * OSRM 프로젝트가 공식 데모(map.project-osrm.org)에서 함께 사용하는
+ * routing.openstreetmap.de의 공개 foot 라우팅 서버를 이용한다.
  */
 (function () {
   'use strict';
 
-  var OSRM_BASE = 'https://router.project-osrm.org/route/v1/driving/';
+  var OSRM_BASE = 'https://routing.openstreetmap.de/routed-foot/route/v1/foot/';
   var NOMINATIM_BASE = 'https://nominatim.openstreetmap.org/search';
 
   var MAX_WAYPOINTS = 5;      // 경유지로 사용할 최대 보호구역 수
-  var MAX_LEG_KM = 400;       // 과도한 전국 경로 요청 방지용 안전장치
+  var MAX_LEG_KM = 30;        // 도보 기준: 과도하게 먼 경로 요청 방지용 안전장치
 
   var allData = [];
   var startPoint = null; // {lat, lng}
@@ -225,9 +229,9 @@
 
       var extraKm = (safe.distance - shortest.distance) / 1000;
       var zoneMsg = zones.length
-        ? '이 경로는 어린이보호구역 ' + zones.length + '곳을 경유하며, 최단 경로보다 약 ' +
-          extraKm.toFixed(1) + 'km 더 이동합니다.'
-        : '경로 주변에서 경유 가능한 어린이보호구역을 찾지 못해 최단 경로와 동일하게 안내됩니다.';
+        ? '이 경로는 어린이보호구역 ' + zones.length + '곳을 도보로 경유하며, 최단 도보 경로보다 약 ' +
+          extraKm.toFixed(1) + 'km 더 걷습니다.'
+        : '경로 주변에서 경유 가능한 어린이보호구역을 찾지 못해 최단 도보 경로와 동일하게 안내됩니다.';
       zoneCountEl.textContent = zoneMsg;
 
       resultEl.hidden = false;
